@@ -23,5 +23,6 @@ tasks.test {
 }
 
 application {
-  mainClass.set("nebula.app.DemoQueueSCC")
+  mainClass.set("nebula.ui.DashboardApp")
 }
+
