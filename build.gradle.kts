@@ -23,5 +23,5 @@ tasks.test {
 }
 
 application {
-  mainClass.set("nebula.app.MainDemo")
+  mainClass.set("nebula.app.DemoFifo")
 }
