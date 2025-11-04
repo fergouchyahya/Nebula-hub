@@ -43,10 +43,10 @@ public class RwFairPanel extends BaseDemoPanel {
 
                     public String descriptionHtml() {
                         return """
-                                <ul>
-                                  <li>Création d’un verrou <b>RWFair</b> (évite la famine).</li>
-                                  <li>Remise à zéro du compteur de lecteurs.</li>
-                                </ul>
+                                    <ul>
+                                      <li>Création d’un verrou <b>RWFair</b> (évite la famine).</li>
+                                      <li>Remise à zéro du compteur de lecteurs.</li>
+                                    </ul>
                                 """;
                     }
 
@@ -67,9 +67,7 @@ public class RwFairPanel extends BaseDemoPanel {
                     }
 
                     public String descriptionHtml() {
-                        return """
-                                <p>Lecteurs alternent <code>beginR()</code> / lecture / <code>endR()</code>.</p>
-                                """;
+                        return "<p>Lecteurs alternent <code>beginR()</code> / lecture / <code>endR()</code>.</p>";
                     }
 
                     public void perform() {
@@ -80,8 +78,10 @@ public class RwFairPanel extends BaseDemoPanel {
                             final int id = i + 1;
                             exec.submit(() -> {
                                 while (!Thread.currentThread().isInterrupted()) {
+                                    boolean got = false;
                                     try {
                                         rw.beginR();
+                                        got = true;
                                         int now = readers.incrementAndGet();
                                         ui(() -> lblReaders.setText("Lecteurs actifs: " + now));
                                         logln("R" + id + " -> lit");
@@ -89,8 +89,13 @@ public class RwFairPanel extends BaseDemoPanel {
                                     } catch (InterruptedException e) {
                                         Thread.currentThread().interrupt();
                                     } finally {
-                                        readers.decrementAndGet();
-                                        rw.endR();
+                                        if (got) {
+                                            int now = readers.decrementAndGet();
+                                            rw.endR();
+                                            ui(() -> lblReaders.setText("Lecteurs actifs: " + Math.max(now, 0)));
+                                        } else {
+                                            logln("R" + id + " annulé (pas de lecture)");
+                                        }
                                     }
                                     try {
                                         Thread.sleep(40);
@@ -113,9 +118,7 @@ public class RwFairPanel extends BaseDemoPanel {
                     }
 
                     public String descriptionHtml() {
-                        return """
-                                <p>Rédacteurs alternent <code>beginW()</code> / écriture / <code>endW()</code> (accès exclusif).</p>
-                                """;
+                        return "<p>Rédacteurs alternent <code>beginW()</code> / écriture / <code>endW()</code> (accès exclusif).</p>";
                     }
 
                     public void perform() {
@@ -126,14 +129,20 @@ public class RwFairPanel extends BaseDemoPanel {
                             final int id = i + 1;
                             exec.submit(() -> {
                                 while (!Thread.currentThread().isInterrupted()) {
+                                    boolean got = false;
                                     try {
                                         rw.beginW();
+                                        got = true;
                                         logln("W" + id + " -> écrit");
                                         Thread.sleep(120);
                                     } catch (InterruptedException e) {
                                         Thread.currentThread().interrupt();
                                     } finally {
-                                        rw.endW();
+                                        if (got) {
+                                            rw.endW();
+                                        } else {
+                                            logln("W" + id + " annulé (pas d’écriture)");
+                                        }
                                     }
                                     try {
                                         Thread.sleep(80);
@@ -194,8 +203,10 @@ public class RwFairPanel extends BaseDemoPanel {
                 final int id = i + 1;
                 exec.submit(() -> {
                     while (!Thread.currentThread().isInterrupted()) {
+                        boolean got = false;
                         try {
                             rw.beginR();
+                            got = true;
                             int now = readers.incrementAndGet();
                             ui(() -> lblReaders.setText("Lecteurs actifs: " + now));
                             logln("R" + id + " -> lit");
@@ -203,8 +214,13 @@ public class RwFairPanel extends BaseDemoPanel {
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         } finally {
-                            readers.decrementAndGet();
-                            rw.endR();
+                            if (got) {
+                                int now = readers.decrementAndGet();
+                                rw.endR();
+                                ui(() -> lblReaders.setText("Lecteurs actifs: " + Math.max(now, 0)));
+                            } else {
+                                logln("R" + id + " annulé (pas de lecture)");
+                            }
                         }
                         try {
                             Thread.sleep(40);
@@ -215,19 +231,26 @@ public class RwFairPanel extends BaseDemoPanel {
                     return null;
                 });
             }
+
             // Rédacteurs
             for (int i = 0; i < nw; i++) {
                 final int id = i + 1;
                 exec.submit(() -> {
                     while (!Thread.currentThread().isInterrupted()) {
+                        boolean got = false;
                         try {
                             rw.beginW();
+                            got = true;
                             logln("W" + id + " -> écrit");
                             Thread.sleep(120);
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         } finally {
-                            rw.endW();
+                            if (got) {
+                                rw.endW();
+                            } else {
+                                logln("W" + id + " annulé (pas d’écriture)");
+                            }
                         }
                         try {
                             Thread.sleep(80);

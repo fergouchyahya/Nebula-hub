@@ -48,10 +48,10 @@ public class QueueSccPanel extends BaseDemoPanel {
 
                     public String descriptionHtml() {
                         return """
-                                <ul>
-                                  <li>Création d’une <b>EventQueueSCC</b> de capacité <i>Cap</i>.</li>
-                                  <li>Préparation du graphe d’occupation et du journal.</li>
-                                </ul>
+                                    <ul>
+                                      <li>Création d’une <b>EventQueueSCC</b> de capacité <i>Cap</i>.</li>
+                                      <li>Préparation de l’occupation et du journal.</li>
+                                    </ul>
                                 """;
                     }
 
@@ -61,6 +61,7 @@ public class QueueSccPanel extends BaseDemoPanel {
                         ui(() -> {
                             bar.setMaximum(cap);
                             bar.setValue(0);
+                            bar.setString("0 / " + cap); // ⇐ string initiale
                             lblSize.setText("Taille: 0/" + cap);
                         });
                         logln("[Init] cap=" + cap);
@@ -76,13 +77,12 @@ public class QueueSccPanel extends BaseDemoPanel {
                     }
 
                     public String descriptionHtml() {
-                        return """
-                                <p>Des producteurs publient périodiquement <code>put()</code>.</p>
-                                """;
+                        return "<p>Des producteurs publient périodiquement <code>put()</code>.</p>";
                     }
 
                     public void perform() {
                         ensureExecs();
+                        ensureQueue(); // ⇐ garanti
                         int np = readInt(tfProd, 1);
                         for (int p = 0; p < np; p++) {
                             final int pid = p + 1;
@@ -114,13 +114,12 @@ public class QueueSccPanel extends BaseDemoPanel {
                     }
 
                     public String descriptionHtml() {
-                        return """
-                                <p>Des consommateurs retirent via <code>take()</code>.</p>
-                                """;
+                        return "<p>Des consommateurs retirent via <code>take()</code>.</p>";
                     }
 
                     public void perform() {
                         ensureExecs();
+                        ensureQueue(); // ⇐ garanti
                         int nc = readInt(tfCons, 1);
                         for (int c = 0; c < nc; c++) {
                             final int cid = c + 1;
@@ -182,6 +181,7 @@ public class QueueSccPanel extends BaseDemoPanel {
             ui(() -> {
                 bar.setMaximum(cap);
                 bar.setValue(0);
+                bar.setString("0 / " + cap); // ⇐ string initiale
                 lblSize.setText("Taille: 0/" + cap);
             });
             logln("[Start] cap=" + cap + " P=" + readInt(tfProd, 1) + " C=" + readInt(tfCons, 1));
@@ -232,7 +232,7 @@ public class QueueSccPanel extends BaseDemoPanel {
     @Override
     public void stopDemo() {
         if (!running.getAndSet(false) && mode == DemoMode.FULL_RUN) {
-            /* ok */ }
+            /* noop */ }
         shutdownExecs();
         logln("[Stop]");
     }
@@ -241,20 +241,40 @@ public class QueueSccPanel extends BaseDemoPanel {
     public void resetDemo() {
         stopDemo();
         log.setText("");
-        bar.setValue(0);
-        lblSize.setText("—");
+        q = null; // ⇐ remet à zéro la file
+        ui(() -> {
+            bar.setValue(0);
+            bar.setString("—");
+            lblSize.setText("—");
+        });
     }
 
     private void scheduleSizeTicker() {
         ensureExecs();
         tick.scheduleAtFixedRate(() -> {
             int size = (q != null) ? q.size() : 0;
+            int cap = bar.getMaximum();
             ui(() -> {
                 bar.setValue(size);
-                int max = bar.getMaximum();
-                lblSize.setText("Taille: " + size + "/" + max);
+                bar.setString(size + " / " + cap); // ⇐ string dynamique
+                lblSize.setText("Taille: " + size + "/" + cap);
             });
         }, 0, 120, TimeUnit.MILLISECONDS);
+    }
+
+    // --- helpers ---
+    private void ensureQueue() { // ⇐ nouveau
+        if (q == null) {
+            int cap = readInt(tfCap, 1);
+            q = new EventQueueSCC<>(cap);
+            ui(() -> {
+                bar.setMaximum(cap);
+                bar.setValue(0);
+                bar.setString("0 / " + cap);
+                lblSize.setText("Taille: 0/" + cap);
+            });
+            logln("[Auto-init] cap=" + cap);
+        }
     }
 
     private int readInt(JTextField tf, int min) {

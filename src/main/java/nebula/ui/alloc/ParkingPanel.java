@@ -46,10 +46,10 @@ public class ParkingPanel extends BaseDemoPanel {
 
                     public String descriptionHtml() {
                         return """
-                                <ul>
-                                  <li>Création d’un <b>Parking</b> avec <i>Slots</i> permissions.</li>
-                                  <li>Réinitialisation des compteurs.</li>
-                                </ul>
+                                    <ul>
+                                      <li>Création d’un <b>Parking</b> avec <i>Slots</i> permissions.</li>
+                                      <li>Réinitialisation des compteurs.</li>
+                                    </ul>
                                 """;
                     }
 
@@ -78,22 +78,24 @@ public class ParkingPanel extends BaseDemoPanel {
 
                     public String descriptionHtml() {
                         return """
-                                <p>Chaque tâche fait <code>enter()</code>, travaille un peu, puis <code>leave()</code>.</p>
+                                    <p>Chaque tâche fait <code>enter()</code>, travaille un peu, puis <code>leave()</code>.</p>
                                 """;
                     }
 
                     public void perform() {
                         ensureExecs();
                         ensureParking();
-                        int slots = readInt(tfSlots, 1);
-                        int tasks = readInt(tfTasks, 1);
+                        final int slots = readInt(tfSlots, 1);
+                        final int tasks = readInt(tfTasks, 1);
                         logln("[Spawn] tasks=" + tasks);
 
                         for (int i = 0; i < tasks; i++) {
                             final int id = i + 1;
                             exec.submit(() -> {
+                                boolean got = false;
                                 try {
                                     parking.enter();
+                                    got = true;
                                     int now = concurrent.incrementAndGet();
                                     peak.accumulateAndGet(now, Math::max);
                                     ui(() -> {
@@ -106,16 +108,19 @@ public class ParkingPanel extends BaseDemoPanel {
                                 } catch (InterruptedException e) {
                                     Thread.currentThread().interrupt();
                                 } finally {
-                                    int now = concurrent.decrementAndGet();
-                                    parking.leave();
-                                    ui(() -> {
-                                        barConc.setValue(now);
-                                        barConc.setString(now + " / " + barConc.getMaximum());
-                                        lblConc.setText("Concurrent max: " + peak.get());
-                                    });
-                                    logln("Task " + id + " LEAVE (conc=" + now + ")");
+                                    if (got) {
+                                        int now = concurrent.decrementAndGet();
+                                        parking.leave();
+                                        ui(() -> {
+                                            barConc.setValue(now);
+                                            barConc.setString(now + " / " + barConc.getMaximum());
+                                            lblConc.setText("Concurrent max: " + peak.get());
+                                        });
+                                        logln("Task " + id + " LEAVE (conc=" + now + ")");
+                                    } else {
+                                        logln("Task " + id + " annulée (pas entrée)");
+                                    }
                                 }
-                                return null;
                             });
                         }
                     }
@@ -140,14 +145,6 @@ public class ParkingPanel extends BaseDemoPanel {
                 }));
     }
 
-    
-    protected void configureControls(JPanel controls) {
-        controls.add(new JLabel("Slots:"));
-        controls.add(tfSlots);
-        controls.add(new JLabel("Tasks:"));
-        controls.add(tfTasks);
-    }
-
     @Override
     public void startDemo() {
         if (mode == DemoMode.STEP_BY_STEP)
@@ -157,8 +154,8 @@ public class ParkingPanel extends BaseDemoPanel {
             return;
 
         try {
-            int slots = readInt(tfSlots, 1);
-            int tasks = readInt(tfTasks, 1);
+            final int slots = readInt(tfSlots, 1);
+            final int tasks = readInt(tfTasks, 1);
 
             parking = new Parking(slots);
             concurrent.set(0);
@@ -176,8 +173,10 @@ public class ParkingPanel extends BaseDemoPanel {
             for (int i = 0; i < tasks; i++) {
                 final int id = i + 1;
                 exec.submit(() -> {
+                    boolean got = false;
                     try {
                         parking.enter();
+                        got = true;
                         int now = concurrent.incrementAndGet();
                         peak.accumulateAndGet(now, Math::max);
                         ui(() -> {
@@ -190,16 +189,19 @@ public class ParkingPanel extends BaseDemoPanel {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     } finally {
-                        int now = concurrent.decrementAndGet();
-                        parking.leave();
-                        ui(() -> {
-                            barConc.setValue(now);
-                            barConc.setString(now + " / " + barConc.getMaximum());
-                            lblConc.setText("Concurrent max: " + peak.get());
-                        });
-                        logln("Task " + id + " LEAVE (conc=" + now + ")");
+                        if (got) {
+                            int now = concurrent.decrementAndGet();
+                            parking.leave();
+                            ui(() -> {
+                                barConc.setValue(now);
+                                barConc.setString(now + " / " + barConc.getMaximum());
+                                lblConc.setText("Concurrent max: " + peak.get());
+                            });
+                            logln("Task " + id + " LEAVE (conc=" + now + ")");
+                        } else {
+                            logln("Task " + id + " annulée (pas entrée)");
+                        }
                     }
-                    return null;
                 });
             }
 
@@ -212,7 +214,7 @@ public class ParkingPanel extends BaseDemoPanel {
     @Override
     public void stopDemo() {
         if (!running.getAndSet(false) && mode == DemoMode.FULL_RUN) {
-            /* ok */ }
+            /* noop */ }
         shutdownExecs();
         logln("[Stop]");
     }
@@ -228,6 +230,7 @@ public class ParkingPanel extends BaseDemoPanel {
             barConc.setString("—");
             lblConc.setText("—");
         });
+        parking = null;
     }
 
     private void ensureParking() {

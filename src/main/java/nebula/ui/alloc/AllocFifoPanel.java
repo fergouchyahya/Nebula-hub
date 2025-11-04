@@ -14,12 +14,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AllocFifoPanel extends BaseDemoPanel {
 
-    // UI
     private final JTextField tfCap = new JTextField("3", 4);
     private final JProgressBar bar = new JProgressBar();
     private final JLabel lblAvail = new JLabel("—");
 
-    // État
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ResourcePool pool;
 
@@ -28,7 +26,6 @@ public class AllocFifoPanel extends BaseDemoPanel {
         controlsPanel().add(new JLabel("Capacity:"));
         controlsPanel().add(tfCap);
         bar.setStringPainted(true);
-        // Place la jauge sous les barres via le hook prévu
         extraNorth().add(titled(bar, "Ressources utilisées"));
         add(lblAvail, BorderLayout.SOUTH);
 
@@ -45,10 +42,10 @@ public class AllocFifoPanel extends BaseDemoPanel {
 
                     public String descriptionHtml() {
                         return """
-                                <ul>
-                                  <li>Création d’un <b>ResourcePoolFifo</b> de capacité <i>cap</i>.</li>
-                                  <li>La jauge indique le nombre de ressources <i>occupées</i>.</li>
-                                </ul>
+                                    <ul>
+                                      <li>Création d’un <b>ResourcePoolFifo</b> de capacité <i>cap</i>.</li>
+                                      <li>La jauge indique le nombre de ressources <i>occupées</i>.</li>
+                                    </ul>
                                 """;
                     }
 
@@ -70,19 +67,18 @@ public class AllocFifoPanel extends BaseDemoPanel {
                     }
 
                     public String title() {
-                        return "Lancer des tâches avec demandes k variées";
+                        return "Lancer des tâches multi-k";
                     }
 
                     public String descriptionHtml() {
                         return """
-                                <p>On lance une séquence de tâches qui demandent <code>k</code> ressources,
-                                   travaillent brièvement, puis <code>release(k)</code>.</p>
-                                <p><i>Observation :</i> l’ordre respecte la FIFO.</p>
+                                    <p>On lance des tâches demandant <code>k</code> ressources (puis libération).</p>
+                                    <p><i>Observation :</i> l’ordre de service est strictement FIFO.</p>
                                 """;
                     }
 
                     public void perform() {
-                        ensureExecs(); // IMPORTANT
+                        ensureExecs();
                         ensurePool();
                         int cap = pool.capacity();
                         int[] ks = { 2, 1, 3, 1, 2, 1, 1, 3, 2, 1 };
@@ -90,18 +86,23 @@ public class AllocFifoPanel extends BaseDemoPanel {
                             final int id = i + 1;
                             final int k = Math.min(ks[i], cap);
                             exec.submit(() -> {
+                                boolean got = false;
                                 try {
                                     logln("T" + id + " demande " + k);
                                     pool.acquire(k);
+                                    got = true;
                                     logln("T" + id + " OBTIENT " + k);
                                     Thread.sleep(250);
                                 } catch (InterruptedException e) {
                                     Thread.currentThread().interrupt();
                                 } finally {
-                                    pool.release(k);
-                                    logln("T" + id + " REND " + k);
+                                    if (got) {
+                                        pool.release(k);
+                                        logln("T" + id + " REND " + k);
+                                    } else {
+                                        logln("T" + id + " annulé (pas acquis)");
+                                    }
                                 }
-                                return null;
                             });
                         }
                         scheduleGauges();
@@ -113,7 +114,7 @@ public class AllocFifoPanel extends BaseDemoPanel {
                     }
 
                     public String title() {
-                        return "Observer puis arrêter proprement";
+                        return "Observer puis arrêter";
                     }
 
                     public String descriptionHtml() {
@@ -121,16 +122,10 @@ public class AllocFifoPanel extends BaseDemoPanel {
                     }
 
                     public void perform() throws Exception {
-                        Thread.sleep(2000);
+                        Thread.sleep(1500);
                         stopDemo();
                     }
                 }));
-    }
-
-    
-    protected void configureControls(JPanel controls) {
-        controls.add(new JLabel("Capacity:"));
-        controls.add(tfCap);
     }
 
     // ===== Full run =====
@@ -158,18 +153,23 @@ public class AllocFifoPanel extends BaseDemoPanel {
                 final int id = i + 1;
                 final int k = Math.min(ks[i], cap);
                 exec.submit(() -> {
+                    boolean got = false;
                     try {
                         logln("T" + id + " demande " + k);
                         pool.acquire(k);
+                        got = true;
                         logln("T" + id + " OBTIENT " + k);
                         Thread.sleep(250);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     } finally {
-                        pool.release(k);
-                        logln("T" + id + " REND " + k);
+                        if (got) {
+                            pool.release(k);
+                            logln("T" + id + " REND " + k);
+                        } else {
+                            logln("T" + id + " annulé (pas acquis)");
+                        }
                     }
-                    return null;
                 });
             }
             scheduleGauges();
@@ -182,7 +182,7 @@ public class AllocFifoPanel extends BaseDemoPanel {
     @Override
     public void stopDemo() {
         if (!running.getAndSet(false) && mode == DemoMode.FULL_RUN) {
-            /* ok */ }
+            /* noop */ }
         shutdownExecs();
         logln("[Stop]");
     }
@@ -201,7 +201,7 @@ public class AllocFifoPanel extends BaseDemoPanel {
 
     // ===== Utilitaires =====
     private void scheduleGauges() {
-        ensureExecs(); // IMPORTANT
+        ensureExecs();
         tick.scheduleAtFixedRate(() -> {
             if (pool == null)
                 return;

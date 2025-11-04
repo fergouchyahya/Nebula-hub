@@ -24,7 +24,7 @@ tasks.test {
 
 application {
   // Lanceur unique pour toutes les démos
-  mainClass.set("nebula.app.Demos")
+  mainClass.set("nebula.ui.MainFrame")
 }
 
 // Raccourcis pratiques : ./gradlew runFifo (etc.)

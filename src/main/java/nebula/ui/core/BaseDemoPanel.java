@@ -28,9 +28,8 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
 
     protected DemoMode mode = DemoMode.FULL_RUN;
     protected StepRunner stepper = new StepRunner(List.of());
-    private boolean autoRunning = false;
+    private volatile boolean autoRunning = false;
 
-    // <<< NOUVEAU : exposés aux sous-classes (pas d'appel virtuel pendant super)
     private final JPanel extraNorth = new JPanel(new GridLayout(0, 1, 0, 4));
     private final JPanel controlsBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
@@ -95,7 +94,7 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
         btnReset.addActionListener(e -> resetDemo());
 
         btnPrev.addActionListener(e -> stepPrev());
-        btnDo.addActionListener(e -> stepDo());
+        btnDo.addActionListener(e -> stepDoAsync(null)); // ← ne bloque pas l’EDT
         btnNext.addActionListener(e -> stepNext());
 
         tglAuto.addActionListener(e -> {
@@ -107,7 +106,6 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
         updateStepperEnabled();
     }
 
-    // --- Accès pour les sous-classes (utiliser APRÈS super()) ---
     protected JPanel extraNorth() {
         return extraNorth;
     }
@@ -116,7 +114,6 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
         return controlsBar;
     }
 
-    // --- (le reste identique à ta version précédente) ---
     protected void ensureExecs() {
         if (exec == null || exec.isShutdown() || exec.isTerminated())
             exec = Executors.newCachedThreadPool();
@@ -150,13 +147,10 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
     protected void showStep(int idx) {
         if (stepper.size() == 0)
             return;
-        // amène l’index voulu sans perform()
-        while (stepper.index() > idx) {
+        while (stepper.index() > idx)
             stepper.prev();
-        }
-        while (stepper.index() < idx) {
+        while (stepper.index() < idx)
             stepper.next();
-        }
         var s = stepper.current();
         explain.setText("<html><b>" + s.title() + "</b><br/>" + s.descriptionHtml() + "</html>");
         logln("[Step] " + s.id() + " — " + s.title());
@@ -170,13 +164,21 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
         }
     }
 
-    protected void stepDo() {
-        try {
-            ensureExecs(); // recrée exec/tick si besoin
-            stepper.performCurrent(); // exécute UNE FOIS l’étape courante
-        } catch (Exception ex) {
-            logln("[ERR] " + ex);
-        }
+    /**
+     * Exécute l’étape courante en arrière-plan. Si on passe un latch Future[] f, on
+     * y stocke le Future pour l’auto.
+     */
+    protected void stepDoAsync(Future<?>[] holder) {
+        ensureExecs();
+        Future<?> fut = exec.submit(() -> {
+            try {
+                stepper.performCurrent(); // peut dormir/bosser sans bloquer l’EDT
+            } catch (Exception ex) {
+                logln("[ERR] " + ex);
+            }
+        });
+        if (holder != null && holder.length > 0)
+            holder[0] = fut;
     }
 
     protected void stepNext() {
@@ -187,24 +189,32 @@ public abstract class BaseDemoPanel extends JPanel implements DemoView {
         }
     }
 
+    /** Auto-run : attend la fin de chaque étape avant de passer à la suivante. */
     private void autoRun() {
         ensureExecs();
         exec.submit(() -> {
             while (autoRunning) {
                 try {
-                    SwingUtilities.invokeAndWait(this::stepDo); // exécute l’étape courante
+                    // Do step (async) puis attendre la fin
+                    Future<?>[] h = new Future<?>[1];
+                    SwingUtilities.invokeAndWait(() -> stepDoAsync(h));
+                    if (h[0] != null)
+                        h[0].get(); // ← attend la fin de perform()
+
                     Thread.sleep((Integer) spdMs.getValue());
+
                     if (!stepper.hasNext())
-                        break; // dernière étape : on sort
-                    SwingUtilities.invokeAndWait(this::stepNext); // NAVIGUE seulement
+                        break;
+
+                    SwingUtilities.invokeAndWait(this::stepNext);
                     Thread.sleep((Integer) spdMs.getValue());
                 } catch (Exception e) {
                     logln("[ERR auto] " + e);
                     break;
                 }
             }
-            SwingUtilities.invokeLater(() -> tglAuto.setSelected(false));
             autoRunning = false;
+            SwingUtilities.invokeLater(() -> tglAuto.setSelected(false));
         });
     }
 
