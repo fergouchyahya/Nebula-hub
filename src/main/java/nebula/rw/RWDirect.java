@@ -1,12 +1,14 @@
 package nebula.rw;
 
 public class RWDirect implements RW {
-    private int nr = 0;
-    private boolean writting = false;
+    private int nr = 0; // lecteurs actifs
+    private int waitingW = 0; // writers en attente
+    private boolean writing = false;
 
     @Override
     public synchronized void beginR() throws InterruptedException {
-        while (writting) {
+        // Bloquer l'arrivée de nouveaux lecteurs si des writers attendent
+        while (writing || waitingW > 0) {
             wait();
         }
         nr++;
@@ -14,25 +16,29 @@ public class RWDirect implements RW {
 
     @Override
     public synchronized void endR() {
+        if (nr <= 0)
+            throw new IllegalStateException("endR without beginR");
         nr--;
-        if (nr == 0) {
+        if (nr == 0)
             notifyAll();
-        }
-        ;
     }
 
     @Override
     public synchronized void beginW() throws InterruptedException {
-        while (writting || nr > 0) {
-            wait();
+        waitingW++;
+        try {
+            while (writing || nr > 0) {
+                wait();
+            }
+            writing = true;
+        } finally {
+            waitingW--;
         }
-        writting = true;
     }
 
     @Override
     public synchronized void endW() {
-        writting = false;
+        writing = false;
         notifyAll();
     }
-
 }
