@@ -1,19 +1,19 @@
 package nebula.rate;
 
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Limiteur de concurrence (max N tâches simultanées).
- * Utilise un Semaphore "fair" pour garantir l'ordre FIFO d'entrée.
- */
+/** Limiteur de concurrence (max N tâches simultanées). */
 public class Parking {
     private final Semaphore sem;
+    private final int capacity;
 
     public Parking(int slots) {
         if (slots <= 0)
             throw new IllegalArgumentException("slots > 0 required");
-        this.sem = new Semaphore(slots, true); // équitable => FIFO d'acquisition
+        this.capacity = slots;
+        this.sem = new Semaphore(slots, /* fair */ true); // FIFO sous contention
     }
 
     /** Bloquant : entre quand une place est libre. */
@@ -28,6 +28,7 @@ public class Parking {
 
     /** Temporisé : tente d'entrer, sinon abandonne après timeout. */
     public boolean tryEnter(long timeout, TimeUnit unit) throws InterruptedException {
+        Objects.requireNonNull(unit, "unit");
         return sem.tryAcquire(timeout, unit);
     }
 
@@ -36,18 +37,40 @@ public class Parking {
         sem.release();
     }
 
-    /** Places totales. */
+    /** Capacité totale (constante). */
     public int capacity() {
-        return sem.availablePermits() + (int) sem.getQueueLength();
+        return capacity;
     }
 
-    /** Approximation des places libres (peut varier juste après l'appel). */
+    /** Places libres approximatives (instantané non garanti). */
     public int approxAvailable() {
         return sem.availablePermits();
     }
 
-    /** Longueur de file d'attente (approx). */
+    /** Taille estimée de la file d’attente (approx). */
     public int queued() {
         return sem.getQueueLength();
+    }
+
+    /** Ticket AutoCloseable pour try-with-resources. */
+    public Ticket ticket() throws InterruptedException {
+        enter();
+        return new Ticket(this);
+    }
+
+    public static final class Ticket implements AutoCloseable {
+        private Parking p;
+
+        private Ticket(Parking p) {
+            this.p = p;
+        }
+
+        @Override
+        public void close() {
+            if (p != null) {
+                p.leave();
+                p = null;
+            }
+        }
     }
 }
