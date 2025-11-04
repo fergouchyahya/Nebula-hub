@@ -23,6 +23,6 @@ tasks.test {
 }
 
 application {
-  mainClass.set("nebula.ui.DashboardApp")
+  mainClass.set("nebula.ui.MainFrame")
 }
 

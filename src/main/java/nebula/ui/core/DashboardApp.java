@@ -1,4 +1,4 @@
-package nebula.ui;
+package nebula.ui.core;
 
 import nebula.alloc.ResourcePool;
 import nebula.alloc.ResourcePoolFifo;
