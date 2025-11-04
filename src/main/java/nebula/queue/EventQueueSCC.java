@@ -20,13 +20,15 @@ public class EventQueueSCC<T> implements EventQueue<T> {
 
     @Override
     public void put(T item) throws InterruptedException {
+        if (item == null)
+            throw new NullPointerException("item");
         lock.lock();
         try {
-            while (capacity == q.size()) {
+            while (q.size() == capacity) {
                 notFull.await();
             }
             q.addLast(item);
-            notEmpty.signal();
+            notEmpty.signal(); // un consumer suffit
         } finally {
             lock.unlock();
         }
@@ -40,11 +42,10 @@ public class EventQueueSCC<T> implements EventQueue<T> {
                 notEmpty.await();
             }
             T x = q.removeFirst();
-            notFull.signal();
+            notFull.signal(); // un producer suffit
             return x;
         } finally {
             lock.unlock();
-
         }
     }
 
@@ -57,5 +58,4 @@ public class EventQueueSCC<T> implements EventQueue<T> {
             lock.unlock();
         }
     }
-
 }
