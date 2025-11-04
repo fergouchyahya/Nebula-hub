@@ -1,16 +1,29 @@
 package nebula.core;
 
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 
-public class Metrics {
-    private final AtomicLong ops = new AtomicLong();
+public final class Metrics {
+    private final LongAdder ops = new LongAdder();
 
+    /** Incrémente de 1. */
     public void mark() {
-        ops.incrementAndGet();
+        ops.increment();
     }
 
+    /** Incrémente de n (n>0). */
+    public void mark(long n) {
+        if (n <= 0)
+            throw new IllegalArgumentException("n>0 required");
+        ops.add(n);
+    }
+
+    /** Lecture sans reset. */
     public long snapshot() {
-        return ops.get();
+        return ops.sum();
     }
 
+    /** Lecture avec reset atomique (utile pour des taux/s intervalles). */
+    public long snapshotAndReset() {
+        return ops.sumThenReset();
+    }
 }
