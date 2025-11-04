@@ -1,39 +1,46 @@
 package nebula.alloc;
 
 public class ResourcePoolDirect implements ResourcePool {
-    private int cap;
+    private final int cap;
     private int avail;
 
     public ResourcePoolDirect(int capacity) {
         if (capacity <= 0)
-            throw new IllegalArgumentException();
+            throw new IllegalArgumentException("capacity>0 required");
         this.cap = capacity;
         this.avail = capacity;
     }
 
     @Override
-    public void acquire(int k) throws InterruptedException {
+    public synchronized void acquire(int k) throws InterruptedException {
+        if (k <= 0 || k > cap)
+            throw new IllegalArgumentException("0 < k ≤ capacity required");
         while (avail < k) {
-            wait();
+            wait(); // réveils spurious possibles => while
         }
         avail -= k;
+        // invariant: 0 ≤ avail ≤ cap
     }
 
     @Override
-    public void release(int k) {
+    public synchronized void release(int k) {
+        if (k <= 0 || k > cap)
+            throw new IllegalArgumentException("0 < k ≤ capacity required");
         avail += k;
+        if (avail > cap) { // protection contre sur-liberation
+            avail -= k;
+            throw new IllegalStateException("avail overflow");
+        }
         notifyAll();
-
     }
 
     @Override
-    public int capacity() {
+    public synchronized int capacity() {
         return cap;
     }
 
     @Override
-    public int available() {
+    public synchronized int available() {
         return avail;
     }
-
 }

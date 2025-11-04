@@ -1,7 +1,6 @@
 package nebula.alloc;
 
 import java.util.LinkedList;
-import java.util.Objects;
 
 public class ResourcePoolFifo implements ResourcePool {
 
@@ -28,14 +27,24 @@ public class ResourcePoolFifo implements ResourcePool {
     public synchronized void acquire(int k) throws InterruptedException {
         if (k <= 0 || k > cap)
             throw new IllegalArgumentException("0 < k ≤ capacity required");
-        Req r = new Req(k);
+        final Req r = new Req(k);
         q.addLast(r);
-        while (q.peekFirst() != r || avail < k) {
-            wait(); // <= inside synchronized
+        try {
+            for (;;) {
+                if (q.peekFirst() == r && avail >= k) {
+                    avail -= k;
+                    q.removeFirst();
+                    notifyAll(); // réveille le prochain en file (ou libère des producers)
+                    return;
+                }
+                wait();
+            }
+        } catch (InterruptedException ie) {
+            // IMPORTANT : se retirer de la file si on attendait encore
+            if (q.remove(r))
+                notifyAll();
+            throw ie;
         }
-        avail -= k;
-        q.removeFirst();
-        notifyAll(); // <= inside synchronized
     }
 
     @Override
@@ -43,9 +52,11 @@ public class ResourcePoolFifo implements ResourcePool {
         if (k <= 0 || k > cap)
             throw new IllegalArgumentException("0 < k ≤ capacity required");
         avail += k;
-        if (avail > cap)
+        if (avail > cap) {
+            avail -= k;
             throw new IllegalStateException("avail overflow");
-        notifyAll(); // <= inside synchronized
+        }
+        notifyAll();
     }
 
     @Override
